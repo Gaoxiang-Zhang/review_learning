@@ -1,19 +1,3 @@
-# Copyright 2016 The TensorFlow Authors. All Rights Reserved.
-# Modifications Copyright 2017 Abigail See
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-# ==============================================================================
-
 """This file contains code to read the train/eval/test data from file and process it, and read the vocab data from file and process it"""
 
 import glob
@@ -39,15 +23,19 @@ class Vocab(object):
 
   def __init__(self, vocab_file, max_size):
     """Creates a vocab of up to max_size words, reading from the vocab_file. If max_size is 0, reads the entire vocab file.
-
+    # 创建vocab
     Args:
-      vocab_file: path to the vocab file, which is assumed to contain "<word> <frequency>" on each line, sorted with most frequent word first. This code doesn't actually use the frequencies, though.
-      max_size: integer. The maximum size of the resulting Vocabulary."""
+      vocab_file: path to the vocab file, which is assumed to contain "<word> <frequency>" on each line, 
+        sorted with most frequent word first. This code doesn't actually use the frequencies, though. （存储格式为词 频率，实际上用不到频率）
+      max_size: integer. The maximum size of the resulting Vocabulary. （词典的最大size，在main里为50000）
+    """
+    # word2id，id2word以及count
     self._word_to_id = {}
     self._id_to_word = {}
     self._count = 0 # keeps track of total number of words in the Vocab
 
     # [UNK], [PAD], [START] and [STOP] get the ids 0,1,2,3.
+    # 分配UNK，PAD,START,STOP几个特殊字符
     for w in [UNKNOWN_TOKEN, PAD_TOKEN, START_DECODING, STOP_DECODING]:
       self._word_to_id[w] = self._count
       self._id_to_word[self._count] = w
@@ -60,6 +48,7 @@ class Vocab(object):
         if len(pieces) != 2:
           print 'Warning: incorrectly formatted line in vocabulary file: %s\n' % line
           continue
+        # pieces[0]是词，加入到词典中
         w = pieces[0]
         if w in [SENTENCE_START, SENTENCE_END, UNKNOWN_TOKEN, PAD_TOKEN, START_DECODING, STOP_DECODING]:
           raise Exception('<s>, </s>, [UNK], [PAD], [START] and [STOP] shouldn\'t be in the vocab file, but %s is' % w)
@@ -68,6 +57,7 @@ class Vocab(object):
         self._word_to_id[w] = self._count
         self._id_to_word[self._count] = w
         self._count += 1
+        # 如果达到最大限制，则break
         if max_size != 0 and self._count >= max_size:
           print "max_size of vocab was specified as %i; we now have %i words. Stopping reading." % (max_size, self._count)
           break
@@ -76,12 +66,14 @@ class Vocab(object):
 
   def word2id(self, word):
     """Returns the id (integer) of a word (string). Returns [UNK] id if word is OOV."""
+    # word2id
     if word not in self._word_to_id:
       return self._word_to_id[UNKNOWN_TOKEN]
     return self._word_to_id[word]
 
   def id2word(self, word_id):
     """Returns the word (string) corresponding to an id (integer)."""
+    # id2word
     if word_id not in self._id_to_word:
       raise ValueError('Id not found in vocab: %d' % word_id)
     return self._id_to_word[word_id]
@@ -93,7 +85,7 @@ class Vocab(object):
   def write_metadata(self, fpath):
     """Writes metadata file for Tensorboard word embedding visualizer as described here:
       https://www.tensorflow.org/get_started/embedding_viz
-
+    # 将id2word的数据写到文件中
     Args:
       fpath: place to write the metadata file
     """
@@ -107,7 +99,7 @@ class Vocab(object):
 
 def example_generator(data_path, single_pass):
   """Generates tf.Examples from data files.
-
+    # ？？？回过头再看
     Binary data format: <length><blob>. <length> represents the byte size
     of <blob>. <blob> is serialized tf.Example proto. The tf.Example contains
     the tokenized article text and summary.
@@ -145,14 +137,17 @@ def article2ids(article_words, vocab):
   """Map the article words to their ids. Also return a list of OOVs in the article.
 
   Args:
-    article_words: list of words (strings)
-    vocab: Vocabulary object
+    article_words: list of words (strings)（表示成词数组）
+    vocab: Vocabulary object （vocab）
 
   Returns:
     ids:
-      A list of word ids (integers); OOVs are represented by their temporary article OOV number. If the vocabulary size is 50k and the article has 3 OOVs, then these temporary OOV numbers will be 50000, 50001, 50002.
+      A list of word ids (integers); OOVs are represented by their temporary article OOV number. 
+      If the vocabulary size is 50k and the article has 3 OOVs, then these temporary OOV numbers will be 50000, 50001, 50002.
     oovs:
       A list of the OOV words in the article (strings), in the order corresponding to their temporary article OOV numbers."""
+  # ids是article表示成的文章序列，其中包含扩展oov
+  # oov是记录下来的oov
   ids = []
   oovs = []
   unk_id = vocab.word2id(UNKNOWN_TOKEN)
@@ -172,12 +167,13 @@ def abstract2ids(abstract_words, vocab, article_oovs):
   """Map the abstract words to their ids. In-article OOVs are mapped to their temporary OOV numbers.
 
   Args:
-    abstract_words: list of words (strings)
-    vocab: Vocabulary object
-    article_oovs: list of in-article OOV words (strings), in the order corresponding to their temporary article OOV numbers
+    abstract_words: list of words (strings)（同上）
+    vocab: Vocabulary object（同上）
+    article_oovs: list of in-article OOV words (strings), in the order corresponding to their temporary article OOV numbers （article的oov list）
 
   Returns:
     ids: List of ids (integers). In-article OOV words are mapped to their temporary OOV numbers. Out-of-article OOV words are mapped to the UNK token id."""
+  # abstract表示成的文章序列，没有在文章中出现的oov表示成unk
   ids = []
   unk_id = vocab.word2id(UNKNOWN_TOKEN)
   for w in abstract_words:
@@ -197,9 +193,10 @@ def outputids2words(id_list, vocab, article_oovs):
   """Maps output ids to words, including mapping in-article OOVs from their temporary ids to the original OOV string (applicable in pointer-generator mode).
 
   Args:
-    id_list: list of ids (integers)
-    vocab: Vocabulary object
-    article_oovs: list of OOV words (strings) in the order corresponding to their temporary article OOV ids (that have been assigned in pointer-generator mode), or None (in baseline mode)
+    id_list: list of ids (integers)（结果id序列）
+    vocab: Vocabulary object （同上）
+    article_oovs: list of OOV words (strings) in the order corresponding to their temporary article OOV ids (that have been assigned in pointer-generator mode), 
+      or None (in baseline mode) （如果是基础模型，为None，如果是oov模型，是article中的oovs）
 
   Returns:
     words: list of words (strings)
@@ -221,7 +218,7 @@ def outputids2words(id_list, vocab, article_oovs):
 
 def abstract2sents(abstract):
   """Splits abstract text from datafile into list of sentences.
-
+  # 将文件中的abstract text转换为sentence list
   Args:
     abstract: string containing <s> and </s> tags for starts and ends of sentences
 
@@ -231,8 +228,10 @@ def abstract2sents(abstract):
   sents = []
   while True:
     try:
+      # index(str, pos): 从cur位置开始，检索指定的字符串
       start_p = abstract.index(SENTENCE_START, cur)
       end_p = abstract.index(SENTENCE_END, start_p + 1)
+      # 更新cur，并将句子加入sents中
       cur = end_p + len(SENTENCE_END)
       sents.append(abstract[start_p+len(SENTENCE_START):end_p])
     except ValueError as e: # no more sentences
@@ -241,6 +240,7 @@ def abstract2sents(abstract):
 
 def show_art_oovs(article, vocab):
   """Returns the article string, highlighting the OOVs by placing __underscores__ around them"""
+  # 将article以特殊的方式输出
   unk_token = vocab.word2id(UNKNOWN_TOKEN)
   words = article.split(' ')
   words = [("__%s__" % w) if vocab.word2id(w)==unk_token else w for w in words]
@@ -250,7 +250,7 @@ def show_art_oovs(article, vocab):
 
 def show_abs_oovs(abstract, vocab, article_oovs):
   """Returns the abstract string, highlighting the article OOVs with __underscores__.
-
+  # 将abstract以特殊的方式输出
   If a list of article_oovs is provided, non-article OOVs are differentiated like !!__this__!!.
 
   Args:

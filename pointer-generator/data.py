@@ -99,7 +99,7 @@ class Vocab(object):
 
 def example_generator(data_path, single_pass):
   """Generates tf.Examples from data files.
-    # ？？？回过头再看
+    # 从文件中产生example迭代器
     Binary data format: <length><blob>. <length> represents the byte size
     of <blob>. <blob> is serialized tf.Example proto. The tf.Example contains
     the tokenized article text and summary.
@@ -146,8 +146,8 @@ def article2ids(article_words, vocab):
       If the vocabulary size is 50k and the article has 3 OOVs, then these temporary OOV numbers will be 50000, 50001, 50002.
     oovs:
       A list of the OOV words in the article (strings), in the order corresponding to their temporary article OOV numbers."""
-  # ids是article表示成的文章序列，其中包含扩展oov
-  # oov是记录下来的oov
+  # ids是article表示成的文章序列，其中包含扩展oov（id list）
+  # oov是记录下来的oov（string list）
   ids = []
   oovs = []
   unk_id = vocab.word2id(UNKNOWN_TOKEN)

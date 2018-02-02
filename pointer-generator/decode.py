@@ -1,19 +1,3 @@
-# Copyright 2016 The TensorFlow Authors. All Rights Reserved.
-# Modifications Copyright 2017 Abigail See
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-# ==============================================================================
-
 """This file contains code to run beam search decoding, including running ROUGE evaluation and producing JSON datafiles for the in-browser attention visualizer, which can be found here https://github.com/abisee/attn_vis"""
 
 import os
@@ -39,9 +23,9 @@ class BeamSearchDecoder(object):
     """Initialize decoder.
 
     Args:
-      model: a Seq2SeqAttentionModel object.
-      batcher: a Batcher object.
-      vocab: Vocabulary object
+      model: a Seq2SeqAttentionModel object. （SummarizationModel）
+      batcher: a Batcher object.（batcher object）
+      vocab: Vocabulary object（vocab object）
     """
     self._model = model
     self._model.build_graph()
@@ -53,6 +37,7 @@ class BeamSearchDecoder(object):
     # Load an initial checkpoint to use for decoding
     ckpt_path = util.load_ckpt(self._saver, self._sess)
 
+    # 负责相关文件夹的创建
     if FLAGS.single_pass:
       # Make a descriptive decode directory name
       ckpt_name = "ckpt-" + ckpt_path.split('-')[-1] # this is something of the form "ckpt-123456"
@@ -76,14 +61,17 @@ class BeamSearchDecoder(object):
 
   def decode(self):
     """Decode examples until data is exhausted (if FLAGS.single_pass) and return, or decode indefinitely, loading latest checkpoint at regular intervals"""
+    # 对example进行decode，根据single_pass决定顺序遍历or无限循环
     t0 = time.time()
     counter = 0
     while True:
       batch = self._batcher.next_batch()  # 1 example repeated across batch
+      # 在single_pass下消耗殆尽
       if batch is None: # finished decoding dataset in single_pass mode
         assert FLAGS.single_pass, "Dataset exhausted, but we are not in single_pass mode"
         tf.logging.info("Decoder has finished reading dataset for single_pass.")
         tf.logging.info("Output has been saved in %s and %s. Now starting ROUGE eval...", self._rouge_ref_dir, self._rouge_dec_dir)
+        # 对rouge进行评估，并写结果
         results_dict = rouge_eval(self._rouge_ref_dir, self._rouge_dec_dir)
         rouge_log(results_dict, self._decode_dir)
         return
@@ -92,17 +80,21 @@ class BeamSearchDecoder(object):
       original_abstract = batch.original_abstracts[0]  # string
       original_abstract_sents = batch.original_abstracts_sents[0]  # list of strings
 
+      # 得到包含特殊格式的article和abstract
       article_withunks = data.show_art_oovs(original_article, self._vocab) # string
       abstract_withunks = data.show_abs_oovs(original_abstract, self._vocab, (batch.art_oovs[0] if FLAGS.pointer_gen else None)) # string
 
       # Run beam search to get best Hypothesis
+      # 运行beam search得到最好的hypothesis
       best_hyp = beam_search.run_beam_search(self._sess, self._model, self._vocab, batch)
 
       # Extract the output ids from the hypothesis and convert back to words
+      # 从hypothesis中得到sequence的word id并转换为word list
       output_ids = [int(t) for t in best_hyp.tokens[1:]]
       decoded_words = data.outputids2words(output_ids, self._vocab, (batch.art_oovs[0] if FLAGS.pointer_gen else None))
 
       # Remove the [STOP] token from decoded_words, if necessary
+      # 去除stop
       try:
         fst_stop_idx = decoded_words.index(data.STOP_DECODING) # index of the (first) [STOP] symbol
         decoded_words = decoded_words[:fst_stop_idx]
@@ -110,6 +102,7 @@ class BeamSearchDecoder(object):
         decoded_words = decoded_words
       decoded_output = ' '.join(decoded_words) # single string
 
+      # 将结果写入文件
       if FLAGS.single_pass:
         self.write_for_rouge(original_abstract_sents, decoded_words, counter) # write ref summary and decoded summary to file, to eval with pyrouge later
         counter += 1 # this is how many examples we've decoded
@@ -207,6 +200,7 @@ def make_html_safe(s):
 
 def rouge_eval(ref_dir, dec_dir):
   """Evaluate the files in ref_dir and dec_dir with pyrouge, returning results_dict"""
+  # 用pyrouge evaluate，代码和官方提供的一样
   r = pyrouge.Rouge155()
   r.model_filename_pattern = '#ID#_reference.txt'
   r.system_filename_pattern = '(\d+)_decoded.txt'
@@ -219,7 +213,7 @@ def rouge_eval(ref_dir, dec_dir):
 
 def rouge_log(results_dict, dir_to_write):
   """Log ROUGE results to screen and write to file.
-
+  # 将结果信息打印在屏幕和log里
   Args:
     results_dict: the dictionary returned by pyrouge
     dir_to_write: the directory where we will write the results to"""

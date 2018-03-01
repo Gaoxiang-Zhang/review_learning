@@ -36,7 +36,7 @@ DECODE_IO_FLUSH_INTERVAL = 100
 
 class DecodeIO(object):
   """Writes the decoded and references to RKV files for Rouge score.
-
+  # 和decode结果输出相关
     See nlp/common/utils/internal/rkv_parser.py for detail about rkv file.
   """
 
@@ -75,10 +75,10 @@ class DecodeIO(object):
 
 class BSDecoder(object):
   """Beam search decoder."""
-
+  # beam search decoder
   def __init__(self, model, batch_reader, hps, vocab):
     """Beam search decoding.
-
+    # 完成一些初始化工作
     Args:
       model: The seq2seq attentional model.
       batch_reader: The batch data reader.
@@ -95,6 +95,7 @@ class BSDecoder(object):
 
   def DecodeLoop(self):
     """Decoding loop for long running process."""
+    # 循环进行decode
     sess = tf.Session(config=tf.ConfigProto(allow_soft_placement=True))
     step = 0
     while step < FLAGS.max_decode_steps:
@@ -105,7 +106,7 @@ class BSDecoder(object):
 
   def _Decode(self, saver, sess):
     """Restore a checkpoint and decode it.
-
+    # 加载一个checkpoint并进行decode
     Args:
       saver: Tensorflow checkpoint saver.
       sess: Tensorflow session.
@@ -125,8 +126,10 @@ class BSDecoder(object):
 
     self._decode_io.ResetFiles()
     for _ in xrange(FLAGS.decode_batches_per_ckpt):
+      # 得到一个batch
       (article_batch, _, _, article_lens, _, _, origin_articles,
        origin_abstracts) = self._batch_reader.NextBatch()
+      # 进行decode
       for i in xrange(self._hps.batch_size):
         bs = beam_search.BeamSearch(
             self._model, self._hps.batch_size,
@@ -140,13 +143,14 @@ class BSDecoder(object):
         article_lens_cp[:] = article_lens[i:i+1]
         best_beam = bs.BeamSearch(sess, article_batch_cp, article_lens_cp)[0]
         decode_output = [int(t) for t in best_beam.tokens[1:]]
+        # 写文件
         self._DecodeBatch(
             origin_articles[i], origin_abstracts[i], decode_output)
     return True
 
   def _DecodeBatch(self, article, abstract, output_ids):
     """Convert id to words and writing results.
-
+    # 将decode的结果转换为words并写文件
     Args:
       article: The original article string.
       abstract: The human (correct) abstract string.

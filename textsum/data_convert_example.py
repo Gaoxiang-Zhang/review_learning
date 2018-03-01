@@ -1,4 +1,5 @@
 """Example of Converting TextSum model data.
+# 主要负责数据格式的转换
 Usage:
 python data_convert_example.py --command binary_to_text --in_file data/data --out_file data/text_data
 python data_convert_example.py --command text_to_binary --in_file data/text_data --out_file data/binary_data

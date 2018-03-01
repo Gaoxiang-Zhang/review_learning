@@ -32,7 +32,7 @@ HParams = namedtuple('HParams',
 def _extract_argmax_and_embed(embedding, output_projection=None,
                               update_embedding=True):
   """Get a loop_function that extracts the previous symbol and embeds it.
-
+  
   Args:
     embedding: embedding tensor for symbols.
     output_projection: None or a pair (W, B). If provided, each fed previous
@@ -46,11 +46,14 @@ def _extract_argmax_and_embed(embedding, output_projection=None,
   def loop_function(prev, _):
     """function that feed previous model output rather than ground truth."""
     if output_projection is not None:
+      # 如果不是None，是(w,v)
       prev = tf.nn.xw_plus_b(
           prev, output_projection[0], output_projection[1])
+    # 返回prev中最大值的索引
     prev_symbol = tf.argmax(prev, 1)
     # Note that gradients will not propagate through the second parameter of
     # embedding_lookup.
+    # 得到prev_symbol对应的embedding
     emb_prev = tf.nn.embedding_lookup(embedding, prev_symbol)
     if not update_embedding:
       emb_prev = tf.stop_gradient(emb_prev)
@@ -60,8 +63,9 @@ def _extract_argmax_and_embed(embedding, output_projection=None,
 
 class Seq2SeqAttentionModel(object):
   """Wrapper for Tensorflow model graph for text sum vectors."""
-
+  # 构建seq2seq model
   def __init__(self, hps, vocab, num_gpus=0):
+    # 必要初始化
     self._hps = hps
     self._vocab = vocab
     self._num_gpus = num_gpus
@@ -69,6 +73,7 @@ class Seq2SeqAttentionModel(object):
 
   def run_train_step(self, sess, article_batch, abstract_batch, targets,
                      article_lens, abstract_lens, loss_weights):
+    # run train
     to_return = [self._train_op, self._summaries, self._loss, self.global_step]
     return sess.run(to_return,
                     feed_dict={self._articles: article_batch,
@@ -80,6 +85,7 @@ class Seq2SeqAttentionModel(object):
 
   def run_eval_step(self, sess, article_batch, abstract_batch, targets,
                     article_lens, abstract_lens, loss_weights):
+    # run eval
     to_return = [self._summaries, self._loss, self.global_step]
     return sess.run(to_return,
                     feed_dict={self._articles: article_batch,
@@ -91,6 +97,7 @@ class Seq2SeqAttentionModel(object):
 
   def run_decode_step(self, sess, article_batch, abstract_batch, targets,
                       article_lens, abstract_lens, loss_weights):
+    # run decode
     to_return = [self._outputs, self.global_step]
     return sess.run(to_return,
                     feed_dict={self._articles: article_batch,
@@ -102,6 +109,7 @@ class Seq2SeqAttentionModel(object):
 
   def _next_device(self):
     """Round robin the gpu device. (Reserve last gpu for expensive op)."""
+    # 轮询下一个gpu dev
     if self._num_gpus == 0:
       return ''
     dev = '/gpu:%d' % self._cur_gpu
@@ -110,35 +118,45 @@ class Seq2SeqAttentionModel(object):
     return dev
 
   def _get_gpu(self, gpu_id):
+    # 得到一个gpu（如果gpu_id合法的话）
     if self._num_gpus <= 0 or gpu_id >= self._num_gpus:
       return ''
     return '/gpu:%d' % gpu_id
 
   def _add_placeholders(self):
     """Inputs to be fed to the graph."""
+    # 加入placeholder
     hps = self._hps
+    # encoder input，shape为batch_size * max_enc_steps
     self._articles = tf.placeholder(tf.int32,
                                     [hps.batch_size, hps.enc_timesteps],
                                     name='articles')
+    # decoder input, shape为batch_size * max_dec_steps
     self._abstracts = tf.placeholder(tf.int32,
                                      [hps.batch_size, hps.dec_timesteps],
                                      name='abstracts')
+    # decoder output, shape为batch_size * max_dec_steps
     self._targets = tf.placeholder(tf.int32,
                                    [hps.batch_size, hps.dec_timesteps],
                                    name='targets')
+    #encoder input len，shape为batch_size
     self._article_lens = tf.placeholder(tf.int32, [hps.batch_size],
                                         name='article_lens')
+    # decoder input len, shape为batch_size
     self._abstract_lens = tf.placeholder(tf.int32, [hps.batch_size],
                                          name='abstract_lens')
+    # decoder input padding, shape和上面相同
     self._loss_weights = tf.placeholder(tf.float32,
                                         [hps.batch_size, hps.dec_timesteps],
                                         name='loss_weights')
 
   def _add_seq2seq(self):
     hps = self._hps
+    # vocab size
     vsize = self._vocab.NumIds()
 
     with tf.variable_scope('seq2seq'):
+      # max_steps个array，每个里面的元素为长度为batch的输入
       encoder_inputs = tf.unstack(tf.transpose(self._articles))
       decoder_inputs = tf.unstack(tf.transpose(self._abstracts))
       targets = tf.unstack(tf.transpose(self._targets))
@@ -146,18 +164,22 @@ class Seq2SeqAttentionModel(object):
       article_lens = self._article_lens
 
       # Embedding shared by the input and outputs.
+      # embedding（学习出来的）
       with tf.variable_scope('embedding'), tf.device('/cpu:0'):
+        # embedding的shape为vsize * embedding dim
         embedding = tf.get_variable(
             'embedding', [vsize, hps.emb_dim], dtype=tf.float32,
             initializer=tf.truncated_normal_initializer(stddev=1e-4))
+        # 得到embedded的inputs
         emb_encoder_inputs = [tf.nn.embedding_lookup(embedding, x)
                               for x in encoder_inputs]
         emb_decoder_inputs = [tf.nn.embedding_lookup(embedding, x)
                               for x in decoder_inputs]
-
+      # enc_layers的encoder
       for layer_i in xrange(hps.enc_layers):
         with tf.variable_scope('encoder%d'%layer_i), tf.device(
             self._next_device()):
+          # 前向和后向的cell
           cell_fw = tf.contrib.rnn.LSTMCell(
               hps.num_hidden,
               initializer=tf.random_uniform_initializer(-0.1, 0.1, seed=123),
@@ -166,12 +188,14 @@ class Seq2SeqAttentionModel(object):
               hps.num_hidden,
               initializer=tf.random_uniform_initializer(-0.1, 0.1, seed=113),
               state_is_tuple=False)
+          # 实际上多层是将encoder的输出接到下一层
           (emb_encoder_inputs, fw_state, _) = tf.contrib.rnn.static_bidirectional_rnn(
               cell_fw, cell_bw, emb_encoder_inputs, dtype=tf.float32,
               sequence_length=article_lens)
       encoder_outputs = emb_encoder_inputs
 
       with tf.variable_scope('output_projection'):
+        # 加一层output_projection
         w = tf.get_variable(
             'w', [hps.num_hidden, vsize], dtype=tf.float32,
             initializer=tf.truncated_normal_initializer(stddev=1e-4))
@@ -181,30 +205,32 @@ class Seq2SeqAttentionModel(object):
             initializer=tf.truncated_normal_initializer(stddev=1e-4))
 
       with tf.variable_scope('decoder'), tf.device(self._next_device()):
-        # When decoding, use model output from the previous step
-        # for the next step.
+        # When decoding, use model output from the previous step for the next step.
         loop_function = None
         if hps.mode == 'decode':
+          # decode的时候用
           loop_function = _extract_argmax_and_embed(
               embedding, (w, v), update_embedding=False)
-
+        # decoder的cell
         cell = tf.contrib.rnn.LSTMCell(
             hps.num_hidden,
             initializer=tf.random_uniform_initializer(-0.1, 0.1, seed=113),
             state_is_tuple=False)
-
+        # 进行reshape
         encoder_outputs = [tf.reshape(x, [hps.batch_size, 1, 2*hps.num_hidden])
                            for x in encoder_outputs]
+        # 得到enc的输出和dec（只要fw state）
         self._enc_top_states = tf.concat(axis=1, values=encoder_outputs)
         self._dec_in_state = fw_state
         # During decoding, follow up _dec_in_state are fed from beam_search.
         # dec_out_state are stored by beam_search for next step feeding.
         initial_state_attention = (hps.mode == 'decode')
+        # 直接调用attention_decoder
         decoder_outputs, self._dec_out_state = tf.contrib.legacy_seq2seq.attention_decoder(
             emb_decoder_inputs, self._dec_in_state, self._enc_top_states,
             cell, num_heads=1, loop_function=loop_function,
             initial_state_attention=initial_state_attention)
-
+      # 输出层
       with tf.variable_scope('output'), tf.device(self._next_device()):
         model_outputs = []
         for i in xrange(len(decoder_outputs)):
@@ -212,7 +238,7 @@ class Seq2SeqAttentionModel(object):
             tf.get_variable_scope().reuse_variables()
           model_outputs.append(
               tf.nn.xw_plus_b(decoder_outputs[i], w, v))
-
+      # 对于decode模式，直接找topk，用于beam search
       if hps.mode == 'decode':
         with tf.variable_scope('decode_output'), tf.device('/cpu:0'):
           best_outputs = [tf.argmax(x, 1) for x in model_outputs]
@@ -222,7 +248,7 @@ class Seq2SeqAttentionModel(object):
 
           self._topk_log_probs, self._topk_ids = tf.nn.top_k(
               tf.log(tf.nn.softmax(model_outputs[-1])), hps.batch_size*2)
-
+      # loss
       with tf.variable_scope('loss'), tf.device(self._next_device()):
         def sampled_loss_func(inputs, labels):
           with tf.device('/cpu:0'):  # Try gpu.
@@ -230,7 +256,7 @@ class Seq2SeqAttentionModel(object):
             return tf.nn.sampled_softmax_loss(
                 weights=w_t, biases=v, labels=labels, inputs=inputs,
                 num_sampled=hps.num_softmax_samples, num_classes=vsize)
-
+        # train的时候用sampled loss
         if hps.num_softmax_samples != 0 and hps.mode == 'train':
           self._loss = seq2seq_lib.sampled_sequence_loss(
               decoder_outputs, targets, loss_weights, sampled_loss_func)
@@ -241,17 +267,20 @@ class Seq2SeqAttentionModel(object):
 
   def _add_train_op(self):
     """Sets self._train_op, op to run for training."""
+    # 设置优化器
     hps = self._hps
-
+    # 学习率
     self._lr_rate = tf.maximum(
         hps.min_lr,  # min_lr_rate.
         tf.train.exponential_decay(hps.lr, self.global_step, 30000, 0.98))
 
     tvars = tf.trainable_variables()
+    # gradient clipping
     with tf.device(self._get_gpu(self._num_gpus-1)):
       grads, global_norm = tf.clip_by_global_norm(
           tf.gradients(self._loss, tvars), hps.max_grad_norm)
     tf.summary.scalar('global_norm', global_norm)
+    # 优化器
     optimizer = tf.train.GradientDescentOptimizer(self._lr_rate)
     tf.summary.scalar('learning rate', self._lr_rate)
     self._train_op = optimizer.apply_gradients(
@@ -259,14 +288,14 @@ class Seq2SeqAttentionModel(object):
 
   def encode_top_state(self, sess, enc_inputs, enc_len):
     """Return the top states from encoder for decoder.
-
+    # 在decode时使用，得到encoder的输出
     Args:
       sess: tensorflow session.
-      enc_inputs: encoder inputs of shape [batch_size, enc_timesteps].
-      enc_len: encoder input length of shape [batch_size]
+      enc_inputs: encoder inputs of shape [batch_size, enc_timesteps]. （enc inputs）
+      enc_len: encoder input length of shape [batch_size]（enc length）
     Returns:
-      enc_top_states: The top level encoder states.
-      dec_in_state: The decoder layer initial state.
+      enc_top_states: The top level encoder states. （encoder的输出）
+      dec_in_state: The decoder layer initial state. （encoder的final state）
     """
     results = sess.run([self._enc_top_states, self._dec_in_state],
                        feed_dict={self._articles: enc_inputs,
@@ -292,6 +321,7 @@ class Seq2SeqAttentionModel(object):
     return ids, probs, new_states
 
   def build_graph(self):
+    # 建图，placeholder+seq2seq+train_op
     self._add_placeholders()
     self._add_seq2seq()
     self.global_step = tf.Variable(0, name='global_step', trainable=False)

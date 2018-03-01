@@ -36,7 +36,7 @@ DOCUMENT_END = '</d>'
 
 class Vocab(object):
   """Vocabulary class for mapping words and ids."""
-
+  # vocab对象，保存id和word的映射关系，文件的保存形式为word, freq（freq从大到小，具体数值用不上）
   def __init__(self, vocab_file, max_size):
     self._word_to_id = {}
     self._id_to_word = {}
@@ -77,7 +77,7 @@ class Vocab(object):
 
 def ExampleGen(data_path, num_epochs=None):
   """Generates tf.Examples from path of data files.
-
+  # 从tf.example文件中产生example迭代器
     Binary data format: <length><blob>. <length> represents the byte size
     of <blob>. <blob> is serialized tf.Example proto. The tf.Example contains
     the tokenized article text and summary.
@@ -112,7 +112,7 @@ def ExampleGen(data_path, num_epochs=None):
 
 def Pad(ids, pad_id, length):
   """Pad or trim list to len length.
-
+  # 将ids填充pad到指定长度
   Args:
     ids: list of ints to pad
     pad_id: what to pad with
@@ -133,7 +133,7 @@ def Pad(ids, pad_id, length):
 
 def GetWordIds(text, vocab, pad_len=None, pad_id=None):
   """Get ids corresponding to words in text.
-
+  # 将text(string)转化为id list
   Assumes tokens separated by space.
 
   Args:
@@ -159,7 +159,7 @@ def GetWordIds(text, vocab, pad_len=None, pad_id=None):
 
 def Ids2Words(ids_list, vocab):
   """Get words from ids.
-
+  # 将id列表转换为word list
   Args:
     ids_list: list of int32
     vocab: TextVocabulary object
@@ -173,7 +173,7 @@ def Ids2Words(ids_list, vocab):
 
 def SnippetGen(text, start_tok, end_tok, inclusive=True):
   """Generates consecutive snippets between start and end tokens.
-
+  # 按照句子形式（找<s>和</s>）产生句子迭代器
   Args:
     text: a string
     start_tok: a string denoting the start of snippets
@@ -186,6 +186,7 @@ def SnippetGen(text, start_tok, end_tok, inclusive=True):
   cur = 0
   while True:
     try:
+      # 开始，结束标志的位置，cur是当前pointer的位置
       start_p = text.index(start_tok, cur)
       end_p = text.index(end_tok, start_p + 1)
       cur = end_p + len(end_tok)
@@ -198,12 +199,13 @@ def SnippetGen(text, start_tok, end_tok, inclusive=True):
 
 
 def GetExFeatureText(ex, key):
+  # 返回数据中的一些额外feature（key）
   return ex.features.feature[key].bytes_list.value[0]
 
 
 def ToSentences(paragraph, include_token=True):
   """Takes tokens of a paragraph and returns list of sentences.
-
+  # 将paragraph转换为句子列表
   Args:
     paragraph: string, text of paragraph
     include_token: Whether include the sentence separation tokens result.

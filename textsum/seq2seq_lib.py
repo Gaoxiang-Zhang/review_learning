@@ -23,14 +23,13 @@ import tensorflow as tf
 def sequence_loss_by_example(inputs, targets, weights, loss_function,
                              average_across_timesteps=True, name=None):
   """Sampled softmax loss for a sequence of inputs (per example).
-
+  # 计算每个example的loss并求和
   Args:
-    inputs: List of 2D Tensors of shape [batch_size x hid_dim].
-    targets: List of 1D batch-sized int32 Tensors of the same length as logits.
-    weights: List of 1D batch-sized float-Tensors of the same length as logits.
-    loss_function: Sampled softmax function (inputs, labels) -> loss
-    average_across_timesteps: If set, divide the returned cost by the total
-      label weight.
+    inputs: List of 2D Tensors of shape [batch_size x hid_dim].（decoder output）
+    targets: List of 1D batch-sized int32 Tensors of the same length as logits.（真实的target）
+    weights: List of 1D batch-sized float-Tensors of the same length as logits.（padding）
+    loss_function: Sampled softmax function (inputs, labels) -> loss（sampled_softmax_loss）
+    average_across_timesteps: If set, divide the returned cost by the total label weight.（reduce_sum的参数）
     name: Optional name for this operation, default: 'sequence_loss_by_example'.
 
   Returns:
@@ -60,15 +59,14 @@ def sampled_sequence_loss(inputs, targets, weights, loss_function,
                           average_across_timesteps=True,
                           average_across_batch=True, name=None):
   """Weighted cross-entropy loss for a sequence of logits, batch-collapsed.
-
+  # 计算sampled loss
   Args:
-    inputs: List of 2D Tensors of shape [batch_size x hid_dim].
-    targets: List of 1D batch-sized int32 Tensors of the same length as inputs.
-    weights: List of 1D batch-sized float-Tensors of the same length as inputs.
-    loss_function: Sampled softmax function (inputs, labels) -> loss
-    average_across_timesteps: If set, divide the returned cost by the total
-      label weight.
-    average_across_batch: If set, divide the returned cost by the batch size.
+    inputs: List of 2D Tensors of shape [batch_size x hid_dim]. （decoder output）
+    targets: List of 1D batch-sized int32 Tensors of the same length as inputs.（真实的target）
+    weights: List of 1D batch-sized float-Tensors of the same length as inputs. （padding）
+    loss_function: Sampled softmax function (inputs, labels) -> loss （sampled_softmax_loss）
+    average_across_timesteps: If set, divide the returned cost by the total label weight.（reduce_sum的参数）
+    average_across_batch: If set, divide the returned cost by the batch size.（是否对batch取平均）
     name: Optional name for this operation, defaults to 'sequence_loss'.
 
   Returns:
@@ -91,7 +89,7 @@ def sampled_sequence_loss(inputs, targets, weights, loss_function,
 
 def linear(args, output_size, bias, bias_start=0.0, scope=None):
   """Linear map: sum_i(args[i] * W[i]), where W[i] is a variable.
-
+  # 完成类似w*s或者是w*h之类的过程
   Args:
     args: a 2D Tensor or a list of 2D, batch x n, Tensors.
     output_size: int, second dimension of W[i].
